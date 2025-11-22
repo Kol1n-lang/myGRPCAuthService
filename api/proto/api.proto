@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package api;
+
+option go_package = "github.com/authService/api";
+
+service AuthService {
+  rpc Register(AuthRequest) returns (RegisterResponse);
+  rpc Login(AuthRequest) returns (AuthResponse);
+  rpc RefreshTokens(RefreshToken) returns (AuthResponse);
+}
+
+message AuthRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message RegisterResponse {
+  bool success = 1;
+}
+
+message AuthResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+}
+
+message RefreshToken {
+  string refresh_token = 1;
+}
