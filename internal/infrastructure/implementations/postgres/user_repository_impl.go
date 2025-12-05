@@ -8,6 +8,7 @@ import (
 
 	"authService/internal/domain/repositories"
 	"github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
 )
 
 var Psql = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
@@ -51,7 +52,6 @@ func (r *UserRepositoryImpl) CheckUserExist(ctx context.Context, email string) (
 		ToSql()
 
 	if err != nil {
-		log.Printf("Failed to build check user query: %v", err)
 		return false, err
 	}
 
@@ -62,9 +62,33 @@ func (r *UserRepositoryImpl) CheckUserExist(ctx context.Context, email string) (
 		return false, nil
 	}
 	if err != nil {
-		log.Printf("Failed to check user existence: %v", err)
 		return false, err
 	}
 
 	return true, nil
+}
+
+func (r *UserRepositoryImpl) GetUserCredentials(ctx context.Context, email string) (uuid.UUID, []byte, error) {
+	query, args, err := Psql.
+		Select("id", "password").
+		From("users").
+		Where(squirrel.Eq{
+			"email":     email,
+			"is_active": true,
+		}).
+		ToSql()
+
+	if err != nil {
+		return uuid.Nil, nil, err
+	}
+
+	var id uuid.UUID
+	var pwdHash []byte
+
+	err = r.db.QueryRowContext(ctx, query, args...).Scan(&id, &pwdHash)
+	if err != nil {
+		return uuid.Nil, nil, err
+	}
+
+	return id, pwdHash, nil
 }

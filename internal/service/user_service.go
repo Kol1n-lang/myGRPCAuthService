@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"log"
 
+	"authService/internal/config"
 	"authService/internal/domain/repositories"
 	"authService/internal/domain/value_objects"
 	"authService/internal/utils/hashing"
@@ -11,7 +14,8 @@ import (
 )
 
 type UserService interface {
-	Register(ctx context.Context, userRegistry *value_objects.UserRegistryVO) error
+	Register(ctx context.Context, userRegistry *value_objects.UserVO) error
+	Login(ctx context.Context, cfg *config.Config, userLogin *value_objects.UserVO) (value_objects.AuthResponse, error)
 }
 
 func NewUserService(repository repositories.UserRepository, brokerRepo repositories.RabbitRepository) UserService {
@@ -26,7 +30,7 @@ type UserServiceImpl struct {
 	brokerRepo repositories.RabbitRepository
 }
 
-func (u *UserServiceImpl) Register(ctx context.Context, userRegistry *value_objects.UserRegistryVO) error {
+func (u *UserServiceImpl) Register(ctx context.Context, userRegistry *value_objects.UserVO) error {
 	exists, err := u.userRepo.CheckUserExist(ctx, userRegistry.Email)
 	if err != nil {
 		log.Printf("Error checking user existence: %v", err)
@@ -56,4 +60,40 @@ func (u *UserServiceImpl) Register(ctx context.Context, userRegistry *value_obje
 
 	log.Printf("User registered successfully: %s", userRegistry.Email)
 	return nil
+}
+
+func (u *UserServiceImpl) Login(ctx context.Context, cfg *config.Config, userLogin *value_objects.UserVO) (value_objects.AuthResponse, error) {
+	userID, hashedPWD, err := u.userRepo.GetUserCredentials(ctx, userLogin.Email)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return value_objects.AuthResponse{}, service_errors.InvalidCredentialsError
+		}
+		log.Printf("Error getting user credentials: %v", err)
+		return value_objects.AuthResponse{}, service_errors.InternalServerError
+	}
+
+	if err := hashing.VerifyPassword(userLogin.Password, hashedPWD); err != nil {
+		if errors.Is(err, hashing.ErrInvalidPassword) {
+			return value_objects.AuthResponse{}, service_errors.InvalidCredentialsError
+		}
+		log.Printf("Password verification error: %v", err)
+		return value_objects.AuthResponse{}, service_errors.InternalServerError
+	}
+
+	tokens, err := hashing.CreateAccessRefreshTokens(
+		userID,
+		cfg.JWT.AccessExpireMinutes,
+		cfg.JWT.RefreshExpireDays,
+		cfg.JWT.JWTSecret,
+		cfg.JWT.Algorithm,
+	)
+	if err != nil {
+		log.Printf("Token generation error: %v", err)
+		return value_objects.AuthResponse{}, service_errors.InternalServerError
+	}
+
+	return value_objects.AuthResponse{
+		AccessToken:  tokens["access"],
+		RefreshToken: tokens["refresh"],
+	}, nil
 }

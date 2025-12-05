@@ -30,7 +30,7 @@ func NewGRPCServer(userService service.UserService, cfg *config.Config) *GRPCSer
 }
 
 func (s *GRPCServer) Register(ctx context.Context, req *api.AuthRequest) (*api.RegisterResponse, error) {
-	userRegistry := value_objects.UserRegistryVO{
+	userRegistry := value_objects.UserVO{
 		Email:    req.Email,
 		Password: req.Password,
 	}
@@ -52,9 +52,30 @@ func (s *GRPCServer) Register(ctx context.Context, req *api.AuthRequest) (*api.R
 }
 
 func (s *GRPCServer) Login(ctx context.Context, req *api.AuthRequest) (*api.AuthResponse, error) {
+	userLogin := value_objects.UserVO{
+		Email:    req.Email,
+		Password: req.Password,
+	}
+
+	if err := validate.Struct(&userLogin); err != nil {
+		return nil, status.Error(codes.InvalidArgument, "Invalid email or password format")
+	}
+
+	tokens, err := s.service.Login(ctx, s.cfg, &userLogin)
+	if err != nil {
+		switch {
+		case errors.Is(err, service_errors.InvalidCredentialsError):
+			return nil, status.Error(codes.Unauthenticated, "Invalid credentials or not active user")
+		case errors.Is(err, service_errors.InternalServerError):
+			return nil, status.Error(codes.Internal, "Internal server error")
+		default:
+			return nil, status.Error(codes.Internal, "Internal server error")
+		}
+	}
+
 	return &api.AuthResponse{
-		AccessToken:  "test_token",
-		RefreshToken: "test_token",
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
 	}, nil
 }
 
