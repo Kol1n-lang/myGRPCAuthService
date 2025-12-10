@@ -2,11 +2,15 @@ package monitoring
 
 import (
 	"log"
+	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 )
 
 var (
+	customRegistry = prometheus.NewRegistry()
+
 	RequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "grpc_requests_total",
@@ -31,11 +35,19 @@ var (
 		},
 		[]string{"service", "method"},
 	)
+
+	initOnce sync.Once
 )
 
-func init() {
-	prometheus.MustRegister(RequestsTotal)
-	prometheus.MustRegister(RequestDuration)
-	prometheus.MustRegister(RequestsInFlight)
-	log.Println("Metrics initialized")
+func InitMetrics() {
+	initOnce.Do(func() {
+		customRegistry.MustRegister(RequestsTotal)
+		customRegistry.MustRegister(RequestDuration)
+		customRegistry.MustRegister(RequestsInFlight)
+
+		customRegistry.MustRegister(collectors.NewGoCollector())
+		customRegistry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+
+		log.Println("Metrics initialized with custom registry")
+	})
 }

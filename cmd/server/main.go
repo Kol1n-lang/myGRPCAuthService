@@ -21,6 +21,7 @@ import (
 )
 
 func main() {
+	monitoring.InitMetrics()
 	cfg := config.Init()
 	log.Println("Config initialized")
 
@@ -58,14 +59,14 @@ func main() {
 
 	go monitoring.StartMetricsServer(cfg.MetricsPort)
 
-	listener, err := net.Listen("tcp", ":8080")
+	listener, err := net.Listen("tcp", ":8081")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	grpcErr := make(chan error, 1)
 	go func() {
-		log.Println("gRPC server starting on :8080")
+		log.Println("gRPC server starting on :8081")
 		if err := grpcServer.Serve(listener); err != nil {
 			grpcErr <- err
 		}
